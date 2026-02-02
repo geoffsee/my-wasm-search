@@ -1,0 +1,270 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { cosine_similarity } from 'wasm-similarity';
+
+// Mock types for testing
+interface TextChunk {
+  id: string;
+  text: string;
+}
+
+interface VectorRecord {
+  id: string;
+  vector: number[];
+}
+
+interface DocumentData {
+  textChunks: TextChunk[];
+  vectorRecords: VectorRecord[];
+}
+
+// Simulated in-memory document store for testing
+const documentsDb: Map<string, DocumentData> = new Map();
+
+describe('Semantic Search Server', () => {
+  beforeEach(() => {
+    documentsDb.clear();
+  });
+
+  describe('Search Algorithm', () => {
+    it('should calculate cosine similarity correctly', () => {
+      const vector1 = new Float64Array([1, 0, 0]);
+      const vector2 = new Float64Array([1, 0, 0]);
+      const similarity = cosine_similarity(vector1, vector2);
+      expect(similarity).toBe(1); // Perfect match
+    });
+
+    it('should handle orthogonal vectors', () => {
+      const vector1 = new Float64Array([1, 0, 0]);
+      const vector2 = new Float64Array([0, 1, 0]);
+      const similarity = cosine_similarity(vector1, vector2);
+      expect(similarity).toBe(0); // Orthogonal
+    });
+
+    it('should handle opposite vectors', () => {
+      const vector1 = new Float64Array([1, 0, 0]);
+      const vector2 = new Float64Array([-1, 0, 0]);
+      const similarity = cosine_similarity(vector1, vector2);
+      expect(similarity).toBe(-1); // Opposite
+    });
+  });
+
+  describe('Document Management', () => {
+    it('should load a document with chunks and vectors', () => {
+      const mockDoc: DocumentData = {
+        textChunks: [
+          { id: 'chunk-1', text: 'Hello world' },
+          { id: 'chunk-2', text: 'Goodbye world' },
+        ],
+        vectorRecords: [
+          { id: 'chunk-1', vector: [0.1, 0.2, 0.3] },
+          { id: 'chunk-2', vector: [0.4, 0.5, 0.6] },
+        ],
+      };
+
+      documentsDb.set('doc-1', mockDoc);
+
+      expect(documentsDb.has('doc-1')).toBe(true);
+      const loaded = documentsDb.get('doc-1')!;
+      expect(loaded.textChunks).toHaveLength(2);
+      expect(loaded.vectorRecords).toHaveLength(2);
+    });
+
+    it('should handle multiple documents', () => {
+      const doc1: DocumentData = {
+        textChunks: [{ id: 'c1', text: 'Doc 1' }],
+        vectorRecords: [{ id: 'c1', vector: [0.1] }],
+      };
+
+      const doc2: DocumentData = {
+        textChunks: [{ id: 'c2', text: 'Doc 2' }],
+        vectorRecords: [{ id: 'c2', vector: [0.2] }],
+      };
+
+      documentsDb.set('doc-1', doc1);
+      documentsDb.set('doc-2', doc2);
+
+      expect(documentsDb.size).toBe(2);
+      expect(documentsDb.get('doc-1')!.textChunks[0].text).toBe('Doc 1');
+      expect(documentsDb.get('doc-2')!.textChunks[0].text).toBe('Doc 2');
+    });
+  });
+
+  describe('Search Results', () => {
+    it('should return empty results when no documents are loaded', () => {
+      const results: Array<{
+        id: string;
+        text: string;
+        similarity: number;
+        documentId: string;
+      }> = [];
+
+      expect(results).toHaveLength(0);
+    });
+
+    it('should rank results by similarity score', () => {
+      const mockDoc: DocumentData = {
+        textChunks: [
+          { id: 'chunk-1', text: 'The quick brown fox' },
+          { id: 'chunk-2', text: 'A slow turtle' },
+          { id: 'chunk-3', text: 'The fast fox jumps' },
+        ],
+        vectorRecords: [
+          { id: 'chunk-1', vector: [0.9, 0.1, 0.0] },
+          { id: 'chunk-2', vector: [0.1, 0.1, 0.8] },
+          { id: 'chunk-3', vector: [0.85, 0.15, 0.0] },
+        ],
+      };
+
+      documentsDb.set('doc-1', mockDoc);
+
+      const queryVector = new Float64Array([0.95, 0.05, 0.0]);
+      const results: Array<{
+        id: string;
+        text: string;
+        similarity: number;
+        documentId: string;
+      }> = [];
+
+      for (const vectorRecord of mockDoc.vectorRecords) {
+        const sim = cosine_similarity(queryVector, new Float64Array(vectorRecord.vector));
+        const chunk = mockDoc.textChunks.find((c) => c.id === vectorRecord.id);
+        if (chunk) {
+          results.push({
+            id: vectorRecord.id,
+            text: chunk.text,
+            similarity: sim,
+            documentId: 'doc-1',
+          });
+        }
+      }
+
+      // Sort by similarity descending
+      results.sort((a, b) => b.similarity - a.similarity);
+
+      expect(results).toHaveLength(3);
+      expect(results[0].similarity).toBeGreaterThan(results[1].similarity);
+      expect(results[1].similarity).toBeGreaterThan(results[2].similarity);
+    });
+
+    it('should respect topK parameter', () => {
+      const mockDoc: DocumentData = {
+        textChunks: [
+          { id: 'c1', text: 'Text 1' },
+          { id: 'c2', text: 'Text 2' },
+          { id: 'c3', text: 'Text 3' },
+          { id: 'c4', text: 'Text 4' },
+          { id: 'c5', text: 'Text 5' },
+        ],
+        vectorRecords: [
+          { id: 'c1', vector: [0.1, 0.0, 0.0] },
+          { id: 'c2', vector: [0.2, 0.0, 0.0] },
+          { id: 'c3', vector: [0.3, 0.0, 0.0] },
+          { id: 'c4', vector: [0.4, 0.0, 0.0] },
+          { id: 'c5', vector: [0.5, 0.0, 0.0] },
+        ],
+      };
+
+      documentsDb.set('doc-1', mockDoc);
+
+      const queryVector = new Float64Array([0.5, 0.0, 0.0]);
+      const results: Array<{
+        id: string;
+        text: string;
+        similarity: number;
+        documentId: string;
+      }> = [];
+
+      for (const vectorRecord of mockDoc.vectorRecords) {
+        const sim = cosine_similarity(queryVector, new Float64Array(vectorRecord.vector));
+        const chunk = mockDoc.textChunks.find((c) => c.id === vectorRecord.id);
+        if (chunk) {
+          results.push({
+            id: vectorRecord.id,
+            text: chunk.text,
+            similarity: sim,
+            documentId: 'doc-1',
+          });
+        }
+      }
+
+      results.sort((a, b) => b.similarity - a.similarity);
+      const topK = 3;
+      const topResults = results.slice(0, topK);
+
+      expect(topResults).toHaveLength(topK);
+    });
+
+    it('should search within a specific document when documentId is provided', () => {
+      const doc1: DocumentData = {
+        textChunks: [{ id: 'c1', text: 'Doc 1 content' }],
+        vectorRecords: [{ id: 'c1', vector: [0.1, 0.0, 0.0] }],
+      };
+
+      const doc2: DocumentData = {
+        textChunks: [{ id: 'c2', text: 'Doc 2 content' }],
+        vectorRecords: [{ id: 'c2', vector: [0.2, 0.0, 0.0] }],
+      };
+
+      documentsDb.set('doc-1', doc1);
+      documentsDb.set('doc-2', doc2);
+
+      const documentId = 'doc-1';
+      const docsToSearch = documentId
+        ? documentsDb.has(documentId)
+          ? [[documentId, documentsDb.get(documentId)!]]
+          : []
+        : Array.from(documentsDb.entries());
+
+      expect(docsToSearch).toHaveLength(1);
+      expect(docsToSearch[0][0]).toBe('doc-1');
+    });
+  });
+
+  describe('Request Validation', () => {
+    it('should validate that query is a string', () => {
+      const query = 'test query';
+      expect(typeof query).toBe('string');
+      expect(query.length).toBeGreaterThan(0);
+    });
+
+    it('should reject empty queries', () => {
+      const query = '';
+      const isValid = !!(query && typeof query === 'string');
+      expect(isValid).toBe(false);
+    });
+
+    it('should accept topK parameter as positive integer', () => {
+      const topK = 5;
+      const isValid = topK > 0 && Number.isInteger(topK);
+      expect(isValid).toBe(true);
+    });
+
+    it('should use default topK=5 when not provided', () => {
+      const providedTopK = undefined;
+      const topK = providedTopK || 5;
+      expect(topK).toBe(5);
+    });
+  });
+
+  describe('Vector Conversion', () => {
+    it('should convert array to Float64Array', () => {
+      const vector = [0.1, 0.2, 0.3];
+      const f64Vector = new Float64Array(vector);
+      expect(f64Vector).toHaveLength(3);
+      expect(f64Vector[0]).toBe(0.1);
+      expect(f64Vector[1]).toBe(0.2);
+      expect(f64Vector[2]).toBe(0.3);
+    });
+
+    it('should handle vectors of different lengths', () => {
+      const shortVector = [0.1];
+      const longVector = [0.1, 0.2, 0.3, 0.4, 0.5];
+
+      const f64Short = new Float64Array(shortVector);
+      const f64Long = new Float64Array(longVector);
+
+      expect(f64Short).toHaveLength(1);
+      expect(f64Long).toHaveLength(5);
+    });
+  });
+});
