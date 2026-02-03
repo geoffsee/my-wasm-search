@@ -1,6 +1,6 @@
 # my-wasm-search
 
-React application to demonstrate Semantic Search using [wasm-similarity](https://www.npmjs.com/package/wasm-similarity)
+Semantic Search application to demonstrate [wasm-similarity](https://www.npmjs.com/package/wasm-similarity) and [di-framework](https://github.com/geoffsee/di-framework)
 
 ![Screenshot](./screenshot.png)
 
