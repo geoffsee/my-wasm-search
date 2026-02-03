@@ -2,7 +2,9 @@
   "extends": "../tsconfig.node.json",
   "compilerOptions": {
     "target": "ES2023",
-    "module": "ES2023"
+    "module": "ESNext",
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true
   },
   "include": ["."]
 }

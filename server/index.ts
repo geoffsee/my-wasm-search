@@ -1,227 +1,36 @@
 import { createServer } from 'http';
 import { Router } from 'itty-router';
-import OpenAI from 'openai';
-import { cosine_similarity } from 'wasm-similarity';
-
-interface DocumentData {
-  textChunks: { id: string; text: string }[];
-  vectorRecords: { id: string; vector: number[] }[];
-}
+import { useContainer } from 'di-framework/container';
+import { ApiController } from './interfaces/http/ApiController';
+import { InMemoryDocumentStore } from './infrastructure/repositories/InMemoryDocumentStore';
+import { OpenAIEmbeddingService } from './infrastructure/services/OpenAIEmbeddingService';
 
 const router = Router();
+const container = useContainer();
 
-// Initialize OpenAI client
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+// Register domain ports to concrete implementations
+container.registerFactory('DocumentStore', () => container.resolve(InMemoryDocumentStore));
+container.registerFactory('EmbeddingPort', () => container.resolve(OpenAIEmbeddingService));
 
-// In-memory document storage
-// In production, this would be a database
-const documentsDb: Map<string, DocumentData> = new Map();
+const apiController = container.resolve(ApiController);
 
 // Health check endpoint
-router.get('/api/health', () => {
-  return new Response(JSON.stringify({ status: 'ok' }), {
-    headers: { 'Content-Type': 'application/json' },
-  });
-});
+router.get('/api/health', () => apiController.health());
 
 // Example API endpoint
-router.get('/api/data', () => {
-  return new Response(
-    JSON.stringify({
-      message: 'Hello from the API',
-      timestamp: new Date().toISOString(),
-    }),
-    {
-      headers: { 'Content-Type': 'application/json' },
-    }
-  );
-});
+router.get('/api/data', () => apiController.data());
 
 // POST example
-router.post('/api/process', async (request: Request) => {
-  try {
-    const body = await request.json();
-    return new Response(
-      JSON.stringify({
-        received: body,
-        processed: true,
-      }),
-      {
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  } catch {
-    return new Response(
-      JSON.stringify({
-        error: 'Invalid request body',
-      }),
-      {
-        status: 400,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-});
+router.post('/api/process', (request: Request) => apiController.process(request));
 
 // Semantic search endpoint
-router.post('/api/search', async (request: Request) => {
-  try {
-    const body = await request.json() as { query: string; documentId?: string; topK?: number };
-    const { query, documentId, topK = 5 } = body;
-
-    if (!query || typeof query !== 'string') {
-      return new Response(
-        JSON.stringify({
-          error: 'query parameter is required and must be a string',
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    if (!openai.apiKey) {
-      return new Response(
-        JSON.stringify({
-          error: 'OpenAI API key not configured',
-        }),
-        {
-          status: 500,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    // Get embedding for the query
-    const queryEmbedding = await openai.embeddings.create({
-      model: 'text-embedding-3-small',
-      input: query,
-    });
-
-    const queryVector = queryEmbedding.data[0].embedding;
-
-    // Search across documents
-    const results: Array<{
-      id: string;
-      text: string;
-      similarity: number;
-      documentId: string;
-    }> = [];
-
-    const docsToSearch = documentId
-      ? documentsDb.has(documentId)
-        ? [[documentId, documentsDb.get(documentId)!]]
-        : []
-      : Array.from(documentsDb.entries());
-
-    for (const [docId, docData] of docsToSearch) {
-      for (const vectorRecord of docData.vectorRecords) {
-        const sim = cosine_similarity(
-          new Float64Array(queryVector),
-          new Float64Array(vectorRecord.vector)
-        );
-        const chunk = docData.textChunks.find((c) => c.id === vectorRecord.id);
-        if (chunk) {
-          results.push({
-            id: vectorRecord.id,
-            text: chunk.text,
-            similarity: sim,
-            documentId: docId,
-          });
-        }
-      }
-    }
-
-    // Sort by similarity and return top K
-    const topResults = results.sort((a, b) => b.similarity - a.similarity).slice(0, topK);
-
-    return new Response(
-      JSON.stringify({
-        query,
-        results: topResults,
-        count: topResults.length,
-      }),
-      {
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  } catch (error) {
-    console.error('Search error:', error);
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Search failed',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-});
+router.post('/api/search', (request: Request) => apiController.search(request));
 
 // Load document endpoint
-router.post('/api/documents/:id', async (request) => {
-  try {
-    const { id } = (request as Request & { params: { id: string } }).params;
-    const body = await request.json() as DocumentData;
-
-    if (!body.textChunks || !body.vectorRecords) {
-      return new Response(
-        JSON.stringify({
-          error: 'Request must include textChunks and vectorRecords',
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
-    documentsDb.set(id, body);
-
-    return new Response(
-      JSON.stringify({
-        message: `Document '${id}' loaded successfully`,
-        chunks: body.textChunks.length,
-      }),
-      {
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  } catch (error) {
-    console.error('Document load error:', error);
-    return new Response(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : 'Failed to load document',
-      }),
-      {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-  }
-});
+router.post('/api/documents/:id', (request: any) => apiController.loadDocument(request));
 
 // List loaded documents endpoint
-router.get('/api/documents', () => {
-  const documents = Array.from(documentsDb.entries()).map(([id, data]) => ({
-    id,
-    chunkCount: data.textChunks.length,
-  }));
-
-  return new Response(
-    JSON.stringify({
-      documents,
-      total: documents.length,
-    }),
-    {
-      headers: { 'Content-Type': 'application/json' },
-    }
-  );
-});
+router.get('/api/documents', () => apiController.listDocuments());
 
 // 404 fallback
 router.all('*', () => {

@@ -5,11 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:server": "node --experimental-strip-types server/index.ts",
+    "build:server": "bun server/build-server.mjs",
+    "dev:server": "bun run build:server && bun dist/server/index.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "pdf-to-json": "tsx util/pdf-to-json.ts",
+    "pdf-to-json": "bun util/pdf-to-json.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -26,6 +27,8 @@
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
+    "@vitejs/plugin-react-swc": "^4.2.3",
+    "di-framework": "^2.0.4",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",

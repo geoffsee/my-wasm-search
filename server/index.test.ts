@@ -1,28 +1,30 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { cosine_similarity } from 'wasm-similarity';
+import type { DocumentData } from './domain/models';
+import { InMemoryDocumentStore } from './infrastructure/repositories/InMemoryDocumentStore';
+import { DocumentApplicationService } from './application/services/DocumentApplicationService';
+import { SearchService } from './domain/services/SearchService';
+import { EmbeddingPort } from './domain/ports/EmbeddingPort';
 
-// Mock types for testing
-interface TextChunk {
-  id: string;
-  text: string;
+class StubEmbeddingService extends EmbeddingPort {
+  async embed(text: string): Promise<Float64Array> {
+    // Map text to simple unit vectors for deterministic tests
+    if (text.includes('fox')) return new Float64Array([1, 0, 0]);
+    if (text.includes('turtle')) return new Float64Array([0, 1, 0]);
+    return new Float64Array([0, 0, 1]);
+  }
 }
 
-interface VectorRecord {
-  id: string;
-  vector: number[];
-}
-
-interface DocumentData {
-  textChunks: TextChunk[];
-  vectorRecords: VectorRecord[];
-}
-
-// Simulated in-memory document store for testing
-const documentsDb: Map<string, DocumentData> = new Map();
+// Test-local instances to avoid touching the global DI container
+let documentsDb: InMemoryDocumentStore;
+let documentService: DocumentApplicationService;
+let searchService: SearchService;
 
 describe('Semantic Search Server', () => {
   beforeEach(() => {
-    documentsDb.clear();
+    documentsDb = new InMemoryDocumentStore();
+    documentService = new DocumentApplicationService(documentsDb);
+    searchService = new SearchService(new StubEmbeddingService(), documentsDb);
   });
 
   describe('Search Algorithm', () => {
@@ -61,10 +63,10 @@ describe('Semantic Search Server', () => {
         ],
       };
 
-      documentsDb.set('doc-1', mockDoc);
+      documentService.loadDocument('doc-1', mockDoc);
 
-      expect(documentsDb.has('doc-1')).toBe(true);
-      const loaded = documentsDb.get('doc-1')!;
+      expect(documentsDb.exists('doc-1')).toBe(true);
+      const loaded = documentsDb.find('doc-1')!;
       expect(loaded.textChunks).toHaveLength(2);
       expect(loaded.vectorRecords).toHaveLength(2);
     });
@@ -80,24 +82,20 @@ describe('Semantic Search Server', () => {
         vectorRecords: [{ id: 'c2', vector: [0.2] }],
       };
 
-      documentsDb.set('doc-1', doc1);
-      documentsDb.set('doc-2', doc2);
+      documentService.loadDocument('doc-1', doc1);
+      documentService.loadDocument('doc-2', doc2);
 
-      expect(documentsDb.size).toBe(2);
-      expect(documentsDb.get('doc-1')!.textChunks[0].text).toBe('Doc 1');
-      expect(documentsDb.get('doc-2')!.textChunks[0].text).toBe('Doc 2');
+      const docs = documentService.listDocuments();
+      expect(docs).toHaveLength(2);
+      const [d1, d2] = documentService.getDocumentsToSearch();
+      expect(d1[1].textChunks[0].text).toBe('Doc 1');
+      expect(d2[1].textChunks[0].text).toBe('Doc 2');
     });
   });
 
   describe('Search Results', () => {
     it('should return empty results when no documents are loaded', () => {
-      const results: Array<{
-        id: string;
-        text: string;
-        similarity: number;
-        documentId: string;
-      }> = [];
-
+      const results = documentService.getDocumentsToSearch();
       expect(results).toHaveLength(0);
     });
 
@@ -115,35 +113,15 @@ describe('Semantic Search Server', () => {
         ],
       };
 
-      documentsDb.set('doc-1', mockDoc);
+      documentService.loadDocument('doc-1', mockDoc);
 
-      const queryVector = new Float64Array([0.95, 0.05, 0.0]);
-      const results: Array<{
-        id: string;
-        text: string;
-        similarity: number;
-        documentId: string;
-      }> = [];
+      const results = searchService.search('fox', 5, 'doc-1');
 
-      for (const vectorRecord of mockDoc.vectorRecords) {
-        const sim = cosine_similarity(queryVector, new Float64Array(vectorRecord.vector));
-        const chunk = mockDoc.textChunks.find((c) => c.id === vectorRecord.id);
-        if (chunk) {
-          results.push({
-            id: vectorRecord.id,
-            text: chunk.text,
-            similarity: sim,
-            documentId: 'doc-1',
-          });
-        }
-      }
-
-      // Sort by similarity descending
-      results.sort((a, b) => b.similarity - a.similarity);
-
-      expect(results).toHaveLength(3);
-      expect(results[0].similarity).toBeGreaterThan(results[1].similarity);
-      expect(results[1].similarity).toBeGreaterThan(results[2].similarity);
+      return results.then((r) => {
+        expect(r).toHaveLength(3);
+        expect(r[0].similarity).toBeGreaterThan(r[1].similarity);
+        expect(r[1].similarity).toBeGreaterThan(r[2].similarity);
+      });
     });
 
     it('should respect topK parameter', () => {
@@ -164,34 +142,11 @@ describe('Semantic Search Server', () => {
         ],
       };
 
-      documentsDb.set('doc-1', mockDoc);
+      documentService.loadDocument('doc-1', mockDoc);
 
-      const queryVector = new Float64Array([0.5, 0.0, 0.0]);
-      const results: Array<{
-        id: string;
-        text: string;
-        similarity: number;
-        documentId: string;
-      }> = [];
-
-      for (const vectorRecord of mockDoc.vectorRecords) {
-        const sim = cosine_similarity(queryVector, new Float64Array(vectorRecord.vector));
-        const chunk = mockDoc.textChunks.find((c) => c.id === vectorRecord.id);
-        if (chunk) {
-          results.push({
-            id: vectorRecord.id,
-            text: chunk.text,
-            similarity: sim,
-            documentId: 'doc-1',
-          });
-        }
-      }
-
-      results.sort((a, b) => b.similarity - a.similarity);
-      const topK = 3;
-      const topResults = results.slice(0, topK);
-
-      expect(topResults).toHaveLength(topK);
+      return searchService.search('fox', 3, 'doc-1').then((topResults) => {
+        expect(topResults).toHaveLength(3);
+      });
     });
 
     it('should search within a specific document when documentId is provided', () => {
@@ -205,15 +160,10 @@ describe('Semantic Search Server', () => {
         vectorRecords: [{ id: 'c2', vector: [0.2, 0.0, 0.0] }],
       };
 
-      documentsDb.set('doc-1', doc1);
-      documentsDb.set('doc-2', doc2);
+      documentService.loadDocument('doc-1', doc1);
+      documentService.loadDocument('doc-2', doc2);
 
-      const documentId = 'doc-1';
-      const docsToSearch = documentId
-        ? documentsDb.has(documentId)
-          ? [[documentId, documentsDb.get(documentId)!]]
-          : []
-        : Array.from(documentsDb.entries());
+      const docsToSearch = documentService.getDocumentsToSearch('doc-1');
 
       expect(docsToSearch).toHaveLength(1);
       expect(docsToSearch[0][0]).toBe('doc-1');
