@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import '../styles/Search.css';
 
 interface NeighborChunks {
@@ -44,6 +44,77 @@ function highlightText(text: string, highlights: string[]): React.ReactNode {
 
 const PAGE_SIZE_OPTIONS = [5, 10, 25, 50];
 
+function SearchIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="11" cy="11" r="8" />
+      <path d="m21 21-4.35-4.35" />
+    </svg>
+  );
+}
+
+function SunIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 2v2" />
+      <path d="M12 20v2" />
+      <path d="m4.93 4.93 1.41 1.41" />
+      <path d="m17.66 17.66 1.41 1.41" />
+      <path d="M2 12h2" />
+      <path d="M20 12h2" />
+      <path d="m6.34 17.66-1.41 1.41" />
+      <path d="m19.07 4.93-1.41 1.41" />
+    </svg>
+  );
+}
+
+function MoonIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+    </svg>
+  );
+}
+
+type Theme = 'light' | 'dark' | 'system';
+
+function getSystemTheme(): 'light' | 'dark' {
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState<Theme>(() => {
+    const stored = localStorage.getItem('theme') as Theme | null;
+    return stored || 'system';
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+
+    if (theme === 'system') {
+      root.removeAttribute('data-theme');
+      localStorage.removeItem('theme');
+    } else {
+      root.setAttribute('data-theme', theme);
+      localStorage.setItem('theme', theme);
+    }
+  }, [theme]);
+
+  const resolvedTheme = theme === 'system' ? getSystemTheme() : theme;
+
+  const toggleTheme = () => {
+    setTheme(current => {
+      if (current === 'system') {
+        return getSystemTheme() === 'dark' ? 'light' : 'dark';
+      }
+      return current === 'dark' ? 'light' : 'dark';
+    });
+  };
+
+  return { theme, resolvedTheme, toggleTheme };
+}
+
 export function Search() {
   const [query, setQuery] = useState('');
   const [searchedQuery, setSearchedQuery] = useState('');
@@ -53,6 +124,7 @@ export function Search() {
   const [error, setError] = useState<string | null>(null);
   const [hasSearched, setHasSearched] = useState(false);
   const [pageSize, setPageSize] = useState(10);
+  const { resolvedTheme, toggleTheme } = useTheme();
 
   const fetchResults = useCallback(async (searchQuery: string, page: number, limit: number) => {
     setIsLoading(true);
@@ -132,8 +204,14 @@ export function Search() {
   return (
     <div className="search-container">
       <div className="search-header">
-        <h1>Semantic Search</h1>
-        <p className="subtitle">Search across your documents with AI embeddings</p>
+        <h1>Search</h1>
+        <button
+          className="theme-toggle"
+          onClick={toggleTheme}
+          aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          {resolvedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
+        </button>
       </div>
 
       <form onSubmit={handleSearch} className="search-form">
@@ -142,7 +220,7 @@ export function Search() {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Enter your search query..."
+            placeholder="Search your documents..."
             className="search-input"
             disabled={isLoading}
             autoFocus
@@ -151,17 +229,12 @@ export function Search() {
             type="submit"
             className="search-button"
             disabled={isLoading}
+            aria-label="Search"
           >
             {isLoading ? (
-              <>
-                <span className="spinner"></span>
-                Searching...
-              </>
+              <span className="spinner"></span>
             ) : (
-              <>
-                <span className="search-icon">⌕</span>
-                Search
-              </>
+              <SearchIcon />
             )}
           </button>
         </div>
@@ -169,7 +242,6 @@ export function Search() {
 
       {error && (
         <div className="error-message">
-          <span className="error-icon">⚠️</span>
           {error}
         </div>
       )}
@@ -178,10 +250,10 @@ export function Search() {
         <div className="results-container">
           <div className="results-header">
             <h2 className="results-title">
-              Found {total} result{total !== 1 ? 's' : ''}
+              {total} result{total !== 1 ? 's' : ''}
             </h2>
             <div className="page-size-selector">
-              <label htmlFor="page-size">Results per page:</label>
+              <label htmlFor="page-size">Per page:</label>
               <select
                 id="page-size"
                 value={pageSize}
@@ -198,34 +270,12 @@ export function Search() {
           </div>
 
           <div className="results-info">
-            Showing {startIndex + 1}–{endIndex} of {total}
+            {startIndex + 1}–{endIndex} of {total}
           </div>
 
           <div className="results-list">
             {results.map((result) => (
               <div key={result.id} className="result-card">
-                <div className="result-header">
-                  <div className="result-rank">#{result.rank}</div>
-                  <div className="result-scores">
-                    <div className="result-similarity">
-                      <span className="similarity-label">Score</span>
-                      <span className="similarity-score">
-                        {(result.similarity * 100).toFixed(1)}%
-                      </span>
-                    </div>
-                    {result.semanticScore !== undefined && result.keywordScore !== undefined && (
-                      <div className="score-breakdown">
-                        <span className="score-item semantic">
-                          Semantic: {(result.semanticScore * 100).toFixed(0)}%
-                        </span>
-                        <span className="score-item keyword">
-                          Keyword: {(result.keywordScore * 100).toFixed(0)}%
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
                 {result.documentTitle && (
                   <div className="result-doc-title">{result.documentTitle}</div>
                 )}
@@ -234,38 +284,11 @@ export function Search() {
                   {highlightText(result.text, result.highlights)}
                 </p>
 
-                {result.highlights.length > 0 && (
-                  <div className="result-highlights">
-                    {result.highlights.map((h, i) => (
-                      <span key={i} className="highlight-tag">{h}</span>
-                    ))}
-                  </div>
-                )}
-
                 <div className="result-footer">
                   <span className="result-chunk-pos">
                     Chunk {result.chunkIndex + 1} of {result.totalChunks}
                   </span>
-                  <div className="result-nav">
-                    {result.neighborChunks.prev && (
-                      <span className="nav-hint" title={`Previous: ${result.neighborChunks.prev}`}>
-                        Prev
-                      </span>
-                    )}
-                    {result.neighborChunks.next && (
-                      <span className="nav-hint" title={`Next: ${result.neighborChunks.next}`}>
-                        Next
-                      </span>
-                    )}
-                  </div>
-                  <span className="result-doc-id">Doc: {result.documentId}</span>
-                </div>
-
-                <div className="similarity-bar">
-                  <div
-                    className="similarity-fill"
-                    style={{ width: `${Math.min(result.similarity * 100, 100)}%` }}
-                  ></div>
+                  <span className="result-doc-id">{result.documentId}</span>
                 </div>
               </div>
             ))}
@@ -345,33 +368,13 @@ export function Search() {
       {hasSearched && results.length === 0 && !error && !isLoading && (
         <div className="empty-state">
           <p>No results found</p>
-          <p className="empty-hint">
-            Try loading documents first using the API endpoint /api/documents/:id
-          </p>
         </div>
       )}
 
       {!hasSearched && (
         <div className="initial-state">
           <div className="initial-content">
-            <h2>Ready to search</h2>
-            <p>
-              Enter a query above to search across your documents using semantic search.
-            </p>
-            <div className="feature-list">
-              <div className="feature">
-                <span className="feature-icon">🔍</span>
-                <span>Semantic understanding</span>
-              </div>
-              <div className="feature">
-                <span className="feature-icon">⚡</span>
-                <span>Fast WASM similarity</span>
-              </div>
-              <div className="feature">
-                <span className="feature-icon">📊</span>
-                <span>Ranked by relevance</span>
-              </div>
-            </div>
+            <p>Search your documents</p>
           </div>
         </div>
       )}
