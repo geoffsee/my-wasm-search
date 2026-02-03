@@ -25,18 +25,30 @@ export class PgliteDocumentStore extends DocumentStore {
   private async initSchema(): Promise<void> {
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS documents (
-        id TEXT PRIMARY KEY
+        id TEXT PRIMARY KEY,
+        title TEXT
       )
+    `);
+
+    // Migration: add title column if it doesn't exist
+    await this.db.exec(`
+      ALTER TABLE documents ADD COLUMN IF NOT EXISTS title TEXT
     `);
 
     await this.db.exec(`
       CREATE TABLE IF NOT EXISTS text_chunks (
         document_id TEXT NOT NULL,
         chunk_id TEXT NOT NULL,
+        chunk_index INTEGER NOT NULL DEFAULT 0,
         text TEXT NOT NULL,
         PRIMARY KEY (document_id, chunk_id),
         FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
       )
+    `);
+
+    // Migration: add chunk_index column if it doesn't exist
+    await this.db.exec(`
+      ALTER TABLE text_chunks ADD COLUMN IF NOT EXISTS chunk_index INTEGER DEFAULT 0
     `);
 
     await this.db.exec(`
@@ -66,12 +78,16 @@ export class PgliteDocumentStore extends DocumentStore {
       await this.db.query('DELETE FROM text_chunks WHERE document_id = $1', [id]);
       await this.db.query('DELETE FROM documents WHERE id = $1', [id]);
 
-      await this.db.query('INSERT INTO documents (id) VALUES ($1)', [id]);
+      await this.db.query('INSERT INTO documents (id, title) VALUES ($1, $2)', [
+        id,
+        data.title ?? null,
+      ]);
 
-      for (const chunk of data.textChunks) {
+      for (let i = 0; i < data.textChunks.length; i++) {
+        const chunk = data.textChunks[i];
         await this.db.query(
-          'INSERT INTO text_chunks (document_id, chunk_id, text) VALUES ($1, $2, $3)',
-          [id, chunk.id, chunk.text],
+          'INSERT INTO text_chunks (document_id, chunk_id, chunk_index, text) VALUES ($1, $2, $3, $4)',
+          [id, chunk.id, i, chunk.text],
         );
       }
 
@@ -92,11 +108,13 @@ export class PgliteDocumentStore extends DocumentStore {
   async find(id: string): Promise<DocumentData | undefined> {
     await this.ensureReady();
 
-    const docResult = await this.db.query('SELECT id FROM documents WHERE id = $1', [id]);
+    const docResult = await this.db.query('SELECT id, title FROM documents WHERE id = $1', [id]);
     if (docResult.rows.length === 0) return undefined;
 
+    const title = docResult.rows[0].title as string | null;
+
     const chunksResult = await this.db.query(
-      'SELECT chunk_id, text FROM text_chunks WHERE document_id = $1',
+      'SELECT chunk_id, text FROM text_chunks WHERE document_id = $1 ORDER BY chunk_index ASC',
       [id],
     );
 
@@ -115,7 +133,7 @@ export class PgliteDocumentStore extends DocumentStore {
       vector: row.vector as number[],
     }));
 
-    return { textChunks, vectorRecords };
+    return { title: title ?? undefined, textChunks, vectorRecords };
   }
 
   async getAll(): Promise<Array<[string, DocumentData]>> {

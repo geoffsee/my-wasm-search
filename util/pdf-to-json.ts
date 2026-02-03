@@ -32,15 +32,20 @@ export interface VectorRecord {
 }
 
 export interface PdfJsonOutput {
+  title?: string;
   textChunks: TextChunk[];
   vectorRecords: VectorRecord[];
 }
 
 export async function pdfToJson(
   pdfPath: string,
-  openaiClient: OpenAI
+  openaiClient: OpenAI,
+  title?: string
 ): Promise<PdfJsonOutput> {
   const text = await extractTextFromPdf(pdfPath);
+
+  // Default title from filename without extension
+  const derivedTitle = title ?? path.basename(pdfPath, path.extname(pdfPath));
 
   const chunks = chunkText(text);
   const ids = chunks.map(() => randomUUIDv7());
@@ -56,7 +61,7 @@ export async function pdfToJson(
     vector: item.embedding,
   }));
 
-  return { textChunks, vectorRecords };
+  return { title: derivedTitle, textChunks, vectorRecords };
 }
 
 async function main() {

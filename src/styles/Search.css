@@ -206,7 +206,7 @@
 .result-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
   margin-bottom: 1rem;
 }
 
@@ -215,6 +215,13 @@
   font-size: 1.1em;
   color: #14b8a6;
   min-width: 40px;
+}
+
+.result-scores {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
 }
 
 .result-similarity {
@@ -239,6 +246,37 @@
   background-clip: text;
 }
 
+.score-breakdown {
+  display: flex;
+  gap: 0.75rem;
+  font-size: 0.75em;
+}
+
+.score-item {
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.score-item.semantic {
+  background: rgba(139, 92, 246, 0.2);
+  color: #c4b5fd;
+}
+
+.score-item.keyword {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fcd34d;
+}
+
+.result-doc-title {
+  font-size: 0.9em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
 .result-text {
   color: rgba(255, 255, 255, 0.85);
   font-size: 1em;
@@ -247,16 +285,60 @@
   word-break: break-word;
 }
 
+.result-text .highlight {
+  background: rgba(251, 191, 36, 0.3);
+  color: #fef3c7;
+  padding: 0.1em 0.2em;
+  border-radius: 2px;
+}
+
+.result-highlights {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.highlight-tag {
+  font-size: 0.75em;
+  padding: 0.2rem 0.5rem;
+  background: rgba(251, 191, 36, 0.15);
+  color: #fcd34d;
+  border-radius: 4px;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
 .result-footer {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   font-size: 0.8em;
   color: rgba(255, 255, 255, 0.5);
   margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
-.result-doc-id,
-.result-chunk-id {
+.result-chunk-pos {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.result-nav {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.nav-hint {
+  font-size: 0.85em;
+  padding: 0.15rem 0.4rem;
+  background: rgba(100, 108, 255, 0.15);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: help;
+}
+
+.result-doc-id {
   font-family: 'Courier New', monospace;
 }
 

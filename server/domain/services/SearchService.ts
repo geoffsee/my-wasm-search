@@ -6,8 +6,13 @@ import { DocumentStore } from '../ports/DocumentStore';
 
 interface VectorMetadata {
   docId: string;
+  docTitle?: string;
   chunkId: string;
+  chunkIndex: number;
+  totalChunks: number;
   text: string;
+  prevChunkId?: string;
+  nextChunkId?: string;
 }
 
 interface ScoredCandidate {
@@ -33,6 +38,21 @@ function tokenize(text: string): Int32Array {
     uniqueHashes.add(hash);
   }
   return new Int32Array([...uniqueHashes]);
+}
+
+function tokenizeToStrings(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length > 1);
+}
+
+function extractHighlights(text: string, query: string): string[] {
+  const queryTokens = new Set(tokenizeToStrings(query));
+  const textTokens = tokenizeToStrings(text);
+  const matches = textTokens.filter((t) => queryTokens.has(t));
+  return [...new Set(matches)];
 }
 
 function reciprocalRankFusion(
@@ -84,13 +104,31 @@ export class SearchService {
     let dim = 0;
 
     for (const [docId, docData] of docsToSearch) {
+      const totalChunks = docData.textChunks.length;
+      const chunkIdToIndex = new Map<string, number>();
+      docData.textChunks.forEach((chunk, idx) => chunkIdToIndex.set(chunk.id, idx));
+
       for (const vectorRecord of docData.vectorRecords) {
-        const chunk = docData.textChunks.find((c) => c.id === vectorRecord.id);
-        if (chunk) {
-          metadata.push({ docId, chunkId: vectorRecord.id, text: chunk.text });
-          vectors.push(...vectorRecord.vector);
-          dim = vectorRecord.vector.length;
-        }
+        const chunkIndex = chunkIdToIndex.get(vectorRecord.id);
+        if (chunkIndex === undefined) continue;
+
+        const chunk = docData.textChunks[chunkIndex];
+        const prevChunk = chunkIndex > 0 ? docData.textChunks[chunkIndex - 1] : undefined;
+        const nextChunk =
+          chunkIndex < totalChunks - 1 ? docData.textChunks[chunkIndex + 1] : undefined;
+
+        metadata.push({
+          docId,
+          docTitle: docData.title,
+          chunkId: vectorRecord.id,
+          chunkIndex,
+          totalChunks,
+          text: chunk.text,
+          prevChunkId: prevChunk?.id,
+          nextChunkId: nextChunk?.id,
+        });
+        vectors.push(...vectorRecord.vector);
+        dim = vectorRecord.vector.length;
       }
     }
 
@@ -105,13 +143,14 @@ export class SearchService {
     const queryVector = await this.embeddingService.embed(query);
 
     if (mode === 'semantic') {
-      return this.semanticSearch(queryVector, topK, metadata, vectors, dim);
+      return this.semanticSearch(query, queryVector, topK, metadata, vectors, dim);
     }
 
     return this.hybridSearch(query, queryVector, topK, metadata, vectors, dim);
   }
 
   private semanticSearch(
+    query: string,
     queryVector: Float64Array,
     topK: number,
     metadata: VectorMetadata[],
@@ -134,6 +173,15 @@ export class SearchService {
         similarity,
         semanticScore: similarity,
         documentId: meta.docId,
+        rank: i + 1,
+        chunkIndex: meta.chunkIndex,
+        totalChunks: meta.totalChunks,
+        documentTitle: meta.docTitle,
+        highlights: extractHighlights(meta.text, query),
+        neighborChunks: {
+          prev: meta.prevChunkId,
+          next: meta.nextChunkId,
+        },
       });
     }
 
@@ -159,13 +207,25 @@ export class SearchService {
 
     scored.sort((a, b) => b.score - a.score);
 
-    return scored.slice(0, topK).map(({ idx, score }) => ({
-      id: metadata[idx].chunkId,
-      text: metadata[idx].text,
-      similarity: score,
-      keywordScore: score,
-      documentId: metadata[idx].docId,
-    }));
+    return scored.slice(0, topK).map(({ idx, score }, rank) => {
+      const meta = metadata[idx];
+      return {
+        id: meta.chunkId,
+        text: meta.text,
+        similarity: score,
+        keywordScore: score,
+        documentId: meta.docId,
+        rank: rank + 1,
+        chunkIndex: meta.chunkIndex,
+        totalChunks: meta.totalChunks,
+        documentTitle: meta.docTitle,
+        highlights: extractHighlights(meta.text, query),
+        neighborChunks: {
+          prev: meta.prevChunkId,
+          next: meta.nextChunkId,
+        },
+      };
+    });
   }
 
   private hybridSearch(
@@ -228,13 +288,25 @@ export class SearchService {
 
     candidates.sort((a, b) => b.rrfScore - a.rrfScore);
 
-    return candidates.slice(0, topK).map((c) => ({
-      id: metadata[c.idx].chunkId,
-      text: metadata[c.idx].text,
-      similarity: c.rrfScore,
-      semanticScore: c.semanticScore,
-      keywordScore: c.keywordScore,
-      documentId: metadata[c.idx].docId,
-    }));
+    return candidates.slice(0, topK).map((c, rank) => {
+      const meta = metadata[c.idx];
+      return {
+        id: meta.chunkId,
+        text: meta.text,
+        similarity: c.rrfScore,
+        semanticScore: c.semanticScore,
+        keywordScore: c.keywordScore,
+        documentId: meta.docId,
+        rank: rank + 1,
+        chunkIndex: meta.chunkIndex,
+        totalChunks: meta.totalChunks,
+        documentTitle: meta.docTitle,
+        highlights: extractHighlights(meta.text, query),
+        neighborChunks: {
+          prev: meta.prevChunkId,
+          next: meta.nextChunkId,
+        },
+      };
+    });
   }
 }

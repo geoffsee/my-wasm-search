@@ -9,8 +9,14 @@ export interface VectorRecord {
 }
 
 export interface DocumentData {
+  title?: string;
   textChunks: TextChunk[];
   vectorRecords: VectorRecord[];
+}
+
+export interface NeighborChunks {
+  prev?: string;
+  next?: string;
 }
 
 export interface SearchResult {
@@ -20,6 +26,12 @@ export interface SearchResult {
   documentId: string;
   semanticScore?: number;
   keywordScore?: number;
+  rank: number;
+  chunkIndex: number;
+  totalChunks: number;
+  documentTitle?: string;
+  highlights: string[];
+  neighborChunks: NeighborChunks;
 }
 
 export type SearchMode = 'semantic' | 'keyword' | 'hybrid';

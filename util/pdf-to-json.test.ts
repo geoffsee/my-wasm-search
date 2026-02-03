@@ -2,17 +2,19 @@ import { describe, it, expect, vi } from "vitest";
 import path from "node:path";
 import { encode } from "gpt-tokenizer";
 
-// Mock the extract-pdf-text module so pdfjs-dist is never loaded
-vi.mock("./extract-pdf-text.js", () => ({
-  extractTextFromPdf: vi.fn(),
+// Define mock function using vi.hoisted so it's available during vi.mock hoisting
+const { mockExtract } = vi.hoisted(() => ({
+  mockExtract: vi.fn<() => Promise<string>>(),
 }));
 
-import { extractTextFromPdf } from "./extract-pdf-text.js";
+// Mock the extract-pdf-text module so pdfjs-dist is never loaded
+vi.mock("./extract-pdf-text.ts", () => ({
+  extractTextFromPdf: mockExtract,
+}));
+
 import { chunkText, pdfToJson, CHUNK_SIZE, CHUNK_OVERLAP } from "./pdf-to-json.js";
 import type { PdfJsonOutput } from "./pdf-to-json.js";
 import type OpenAI from "openai";
-
-const mockExtract = vi.mocked(extractTextFromPdf);
 
 describe("chunkText", () => {
   it("returns a single chunk for short text", () => {

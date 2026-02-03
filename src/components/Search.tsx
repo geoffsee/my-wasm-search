@@ -1,14 +1,39 @@
 import { useState } from 'react';
 import '../styles/Search.css';
 
+interface NeighborChunks {
+  prev?: string;
+  next?: string;
+}
+
 interface SearchResult {
   id: string;
   text: string;
   similarity: number;
   documentId: string;
+  semanticScore?: number;
+  keywordScore?: number;
+  rank: number;
+  chunkIndex: number;
+  totalChunks: number;
+  documentTitle?: string;
+  highlights: string[];
+  neighborChunks: NeighborChunks;
 }
 
 const API_URL = 'http://localhost:3001/api';
+
+function highlightText(text: string, highlights: string[]): React.ReactNode {
+  if (!highlights.length) return text;
+
+  const regex = new RegExp(`\\b(${highlights.map(h => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\b`, 'gi');
+  const parts = text.split(regex);
+
+  return parts.map((part, i) => {
+    const isHighlight = highlights.some(h => h.toLowerCase() === part.toLowerCase());
+    return isHighlight ? <mark key={i} className="highlight">{part}</mark> : part;
+  });
+}
 
 export function Search() {
   const [query, setQuery] = useState('');
@@ -112,26 +137,69 @@ export function Search() {
             Found {results.length} result{results.length !== 1 ? 's' : ''}
           </h2>
           <div className="results-list">
-            {results.map((result, index) => (
+            {results.map((result) => (
               <div key={result.id} className="result-card">
                 <div className="result-header">
-                  <div className="result-rank">#{index + 1}</div>
-                  <div className="result-similarity">
-                    <span className="similarity-label">Similarity</span>
-                    <span className="similarity-score">
-                      {(result.similarity * 100).toFixed(1)}%
-                    </span>
+                  <div className="result-rank">#{result.rank}</div>
+                  <div className="result-scores">
+                    <div className="result-similarity">
+                      <span className="similarity-label">Score</span>
+                      <span className="similarity-score">
+                        {(result.similarity * 100).toFixed(1)}%
+                      </span>
+                    </div>
+                    {result.semanticScore !== undefined && result.keywordScore !== undefined && (
+                      <div className="score-breakdown">
+                        <span className="score-item semantic">
+                          Semantic: {(result.semanticScore * 100).toFixed(0)}%
+                        </span>
+                        <span className="score-item keyword">
+                          Keyword: {(result.keywordScore * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </div>
-                <p className="result-text">{result.text}</p>
+
+                {result.documentTitle && (
+                  <div className="result-doc-title">{result.documentTitle}</div>
+                )}
+
+                <p className="result-text">
+                  {highlightText(result.text, result.highlights)}
+                </p>
+
+                {result.highlights.length > 0 && (
+                  <div className="result-highlights">
+                    {result.highlights.map((h, i) => (
+                      <span key={i} className="highlight-tag">{h}</span>
+                    ))}
+                  </div>
+                )}
+
                 <div className="result-footer">
+                  <span className="result-chunk-pos">
+                    Chunk {result.chunkIndex + 1} of {result.totalChunks}
+                  </span>
+                  <div className="result-nav">
+                    {result.neighborChunks.prev && (
+                      <span className="nav-hint" title={`Previous: ${result.neighborChunks.prev}`}>
+                        Prev
+                      </span>
+                    )}
+                    {result.neighborChunks.next && (
+                      <span className="nav-hint" title={`Next: ${result.neighborChunks.next}`}>
+                        Next
+                      </span>
+                    )}
+                  </div>
                   <span className="result-doc-id">Doc: {result.documentId}</span>
-                  <span className="result-chunk-id">ID: {result.id}</span>
                 </div>
+
                 <div className="similarity-bar">
                   <div
                     className="similarity-fill"
-                    style={{ width: `${result.similarity * 100}%` }}
+                    style={{ width: `${Math.min(result.similarity * 100, 100)}%` }}
                   ></div>
                 </div>
               </div>
