@@ -18,4 +18,8 @@ export interface SearchResult {
   text: string;
   similarity: number;
   documentId: string;
+  semanticScore?: number;
+  keywordScore?: number;
 }
+
+export type SearchMode = 'semantic' | 'keyword' | 'hybrid';

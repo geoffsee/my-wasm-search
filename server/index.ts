@@ -2,14 +2,14 @@ import { createServer } from 'http';
 import { Router } from 'itty-router';
 import { useContainer } from 'di-framework/container';
 import { ApiController } from './interfaces/http/ApiController';
-import { InMemoryDocumentStore } from './infrastructure/repositories/InMemoryDocumentStore';
+import { PgliteDocumentStore } from './infrastructure/repositories/PgliteDocumentStore';
 import { OpenAIEmbeddingService } from './infrastructure/services/OpenAIEmbeddingService';
 
 const router = Router();
 const container = useContainer();
 
 // Register domain ports to concrete implementations
-container.registerFactory('DocumentStore', () => container.resolve(InMemoryDocumentStore));
+container.registerFactory('DocumentStore', () => container.resolve(PgliteDocumentStore));
 container.registerFactory('EmbeddingPort', () => container.resolve(OpenAIEmbeddingService));
 
 const apiController = container.resolve(ApiController);

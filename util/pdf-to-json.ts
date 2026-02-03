@@ -5,8 +5,8 @@ import { randomUUIDv7 } from "./uuid.js";
 import OpenAI from "openai";
 import { extractTextFromPdf } from "./extract-pdf-text.js";
 
-export const CHUNK_SIZE = 500;
-export const CHUNK_OVERLAP = 50;
+export const CHUNK_SIZE = 128;
+export const CHUNK_OVERLAP = 16;
 
 export function chunkText(text: string): string[] {
   const tokens = encode(text);

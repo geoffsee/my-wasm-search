@@ -6,33 +6,33 @@ import { DocumentStore } from '../../domain/ports/DocumentStore';
 export class DocumentApplicationService {
   private store: DocumentStore;
 
-  constructor(
-    @Component('DocumentStore') store: DocumentStore,
-  ) {
+  constructor(@Component('DocumentStore') store: DocumentStore) {
     this.store = store;
   }
 
-  loadDocument(id: string, data: DocumentData): void {
-    this.store.save(id, data);
+  async loadDocument(id: string, data: DocumentData): Promise<void> {
+    await this.store.save(id, data);
   }
 
-  listDocuments(): Array<{ id: string; chunkCount: number }> {
-    return this.store.getAll().map(([docId, docData]) => ({
+  async listDocuments(): Promise<Array<{ id: string; chunkCount: number }>> {
+    const docs = await this.store.getAll();
+    return docs.map(([docId, docData]) => ({
       id: docId,
       chunkCount: docData.textChunks.length,
     }));
   }
 
-  getDocumentsToSearch(documentId?: string): Array<[string, DocumentData]> {
+  async getDocumentsToSearch(documentId?: string): Promise<Array<[string, DocumentData]>> {
     if (documentId) {
-      if (!this.store.exists(documentId)) return [];
-      const doc = this.store.find(documentId);
+      const exists = await this.store.exists(documentId);
+      if (!exists) return [];
+      const doc = await this.store.find(documentId);
       return doc ? [[documentId, doc]] : [];
     }
     return this.store.getAll();
   }
 
-  getDocument(id: string): DocumentData | undefined {
+  async getDocument(id: string): Promise<DocumentData | undefined> {
     return this.store.find(id);
   }
 }

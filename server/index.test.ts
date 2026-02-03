@@ -51,7 +51,7 @@ describe('Semantic Search Server', () => {
   });
 
   describe('Document Management', () => {
-    it('should load a document with chunks and vectors', () => {
+    it('should load a document with chunks and vectors', async () => {
       const mockDoc: DocumentData = {
         textChunks: [
           { id: 'chunk-1', text: 'Hello world' },
@@ -63,7 +63,7 @@ describe('Semantic Search Server', () => {
         ],
       };
 
-      documentService.loadDocument('doc-1', mockDoc);
+      await documentService.loadDocument('doc-1', mockDoc);
 
       expect(documentsDb.exists('doc-1')).toBe(true);
       const loaded = documentsDb.find('doc-1')!;
@@ -71,7 +71,7 @@ describe('Semantic Search Server', () => {
       expect(loaded.vectorRecords).toHaveLength(2);
     });
 
-    it('should handle multiple documents', () => {
+    it('should handle multiple documents', async () => {
       const doc1: DocumentData = {
         textChunks: [{ id: 'c1', text: 'Doc 1' }],
         vectorRecords: [{ id: 'c1', vector: [0.1] }],
@@ -82,24 +82,24 @@ describe('Semantic Search Server', () => {
         vectorRecords: [{ id: 'c2', vector: [0.2] }],
       };
 
-      documentService.loadDocument('doc-1', doc1);
-      documentService.loadDocument('doc-2', doc2);
+      await documentService.loadDocument('doc-1', doc1);
+      await documentService.loadDocument('doc-2', doc2);
 
-      const docs = documentService.listDocuments();
+      const docs = await documentService.listDocuments();
       expect(docs).toHaveLength(2);
-      const [d1, d2] = documentService.getDocumentsToSearch();
+      const [d1, d2] = await documentService.getDocumentsToSearch();
       expect(d1[1].textChunks[0].text).toBe('Doc 1');
       expect(d2[1].textChunks[0].text).toBe('Doc 2');
     });
   });
 
   describe('Search Results', () => {
-    it('should return empty results when no documents are loaded', () => {
-      const results = documentService.getDocumentsToSearch();
+    it('should return empty results when no documents are loaded', async () => {
+      const results = await documentService.getDocumentsToSearch();
       expect(results).toHaveLength(0);
     });
 
-    it('should rank results by similarity score', () => {
+    it('should rank results by similarity score', async () => {
       const mockDoc: DocumentData = {
         textChunks: [
           { id: 'chunk-1', text: 'The quick brown fox' },
@@ -113,18 +113,15 @@ describe('Semantic Search Server', () => {
         ],
       };
 
-      documentService.loadDocument('doc-1', mockDoc);
+      await documentService.loadDocument('doc-1', mockDoc);
 
-      const results = searchService.search('fox', 5, 'doc-1');
-
-      return results.then((r) => {
-        expect(r).toHaveLength(3);
-        expect(r[0].similarity).toBeGreaterThan(r[1].similarity);
-        expect(r[1].similarity).toBeGreaterThan(r[2].similarity);
-      });
+      const r = await searchService.search('fox', 5, 'doc-1');
+      expect(r).toHaveLength(3);
+      expect(r[0].similarity).toBeGreaterThan(r[1].similarity);
+      expect(r[1].similarity).toBeGreaterThan(r[2].similarity);
     });
 
-    it('should respect topK parameter', () => {
+    it('should respect topK parameter', async () => {
       const mockDoc: DocumentData = {
         textChunks: [
           { id: 'c1', text: 'Text 1' },
@@ -142,14 +139,13 @@ describe('Semantic Search Server', () => {
         ],
       };
 
-      documentService.loadDocument('doc-1', mockDoc);
+      await documentService.loadDocument('doc-1', mockDoc);
 
-      return searchService.search('fox', 3, 'doc-1').then((topResults) => {
-        expect(topResults).toHaveLength(3);
-      });
+      const topResults = await searchService.search('fox', 3, 'doc-1');
+      expect(topResults).toHaveLength(3);
     });
 
-    it('should search within a specific document when documentId is provided', () => {
+    it('should search within a specific document when documentId is provided', async () => {
       const doc1: DocumentData = {
         textChunks: [{ id: 'c1', text: 'Doc 1 content' }],
         vectorRecords: [{ id: 'c1', vector: [0.1, 0.0, 0.0] }],
@@ -160,10 +156,10 @@ describe('Semantic Search Server', () => {
         vectorRecords: [{ id: 'c2', vector: [0.2, 0.0, 0.0] }],
       };
 
-      documentService.loadDocument('doc-1', doc1);
-      documentService.loadDocument('doc-2', doc2);
+      await documentService.loadDocument('doc-1', doc1);
+      await documentService.loadDocument('doc-2', doc2);
 
-      const docsToSearch = documentService.getDocumentsToSearch('doc-1');
+      const docsToSearch = await documentService.getDocumentsToSearch('doc-1');
 
       expect(docsToSearch).toHaveLength(1);
       expect(docsToSearch[0][0]).toBe('doc-1');

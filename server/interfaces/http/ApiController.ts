@@ -93,7 +93,7 @@ export class ApiController {
         );
       }
 
-      this.documentService.loadDocument(id, body);
+      await this.documentService.loadDocument(id, body);
 
       return new Response(
         JSON.stringify({ message: `Document '${id}' loaded successfully`, chunks: body.textChunks.length }),
@@ -107,8 +107,8 @@ export class ApiController {
     }
   }
 
-  listDocuments(): Response {
-    const documents = this.documentService.listDocuments();
+  async listDocuments(): Promise<Response> {
+    const documents = await this.documentService.listDocuments();
     return new Response(
       JSON.stringify({ documents, total: documents.length }),
       { headers: { 'Content-Type': 'application/json' } },
