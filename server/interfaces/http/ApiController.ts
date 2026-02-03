@@ -49,9 +49,17 @@ export class ApiController {
 
   async search(request: Request): Promise<Response> {
     try {
-      const body = await request.json() as { query: string; documentId?: string; topK?: number };
+      const body = await request.json() as {
+        query: string;
+        documentId?: string;
+        page?: number;
+        limit?: number;
+      };
       const query = (body.query ?? '').trim();
-      const topK = Number.isInteger(body.topK) && (body.topK as number) > 0 ? body.topK as number : 5;
+      const page = Number.isInteger(body.page) && (body.page as number) > 0 ? body.page as number : 1;
+      const limit = Number.isInteger(body.limit) && (body.limit as number) > 0
+        ? Math.min(body.limit as number, 100)
+        : 10;
       const documentId = body.documentId;
 
       if (!query) {
@@ -61,10 +69,24 @@ export class ApiController {
         );
       }
 
-      const results = await this.searchService.search(query, topK, documentId);
+      // Fetch enough results for pagination (max 1000 for performance)
+      const allResults = await this.searchService.search(query, 1000, documentId);
+      const total = allResults.length;
+      const totalPages = Math.ceil(total / limit);
+      const startIndex = (page - 1) * limit;
+      const results = allResults.slice(startIndex, startIndex + limit);
 
       return new Response(
-        JSON.stringify({ query, results, count: results.length }),
+        JSON.stringify({
+          query,
+          results,
+          pagination: {
+            page,
+            limit,
+            total,
+            totalPages,
+          },
+        }),
         { headers: { 'Content-Type': 'application/json' } },
       );
     } catch (error) {
