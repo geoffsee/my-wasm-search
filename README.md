@@ -8,9 +8,6 @@ Semantic Search application to demonstrate [wasm-similarity](https://www.npmjs.c
 
 ```bash
 npm install
-npm run dev
-# different shell
-# start the server
-OPENAI_API_KEY=$YOUR_KEY node server/index.ts
+OPENAI_API_KEY=$YOUR_KEY npm run dev
 open http://localhost:5173
 ```
