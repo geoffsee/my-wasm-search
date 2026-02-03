@@ -27,7 +27,7 @@ router.post('/api/process', (request: Request) => apiController.process(request)
 router.post('/api/search', (request: Request) => apiController.search(request));
 
 // Load document endpoint
-router.post('/api/documents/:id', (request: any) => apiController.loadDocument(request));
+router.post('/api/documents/:id', (request: Request) => apiController.loadDocument(request));
 
 // List loaded documents endpoint
 router.get('/api/documents', () => apiController.listDocuments());
