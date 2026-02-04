@@ -42,6 +42,24 @@ This creates a JSON file with:
 - `textChunks`: Array of text chunks from the PDF
 - `vectorRecords`: Array of embedding vectors for each chunk
 
+### Quick Load Script
+
+Use the helper script to convert and load a PDF in one step:
+
+```bash
+OPENAI_API_KEY=your-key ./test-data/load-pdf.sh path/to/file.pdf
+```
+
+Optional arguments: `./test-data/load-pdf.sh <pdf-path> [document-id] [output-json]`
+
+### Verify Server Status
+
+Check if the server is running and list loaded documents:
+
+```bash
+./test-data/verify.sh
+```
+
 ### Loading Documents via API
 
 Use the document loading endpoint to load the processed JSON:
